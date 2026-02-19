@@ -1,0 +1,35 @@
+# Go
+bin/
+*.exe
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+vendor/
+
+# Node (web UI)
+ui/node_modules/
+ui/dist/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Drift runtime
+drift.db
+drift.db-wal
+drift.db-shm
+*.sqlite
+*.sqlite3
+
+# Environment
+.env
+.env.local

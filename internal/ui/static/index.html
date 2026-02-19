@@ -1,0 +1,98 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>drift</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #0f172a; color: #e2e8f0; }
+        .container { max-width: 960px; margin: 0 auto; padding: 2rem; }
+        header { display: flex; align-items: center; gap: 1rem; margin-bottom: 2rem; padding-bottom: 1rem; border-bottom: 1px solid #334155; }
+        h1 { font-size: 1.5rem; font-weight: 700; }
+        .badge { background: #22c55e; color: #0f172a; padding: 0.125rem 0.5rem; border-radius: 9999px; font-size: 0.75rem; font-weight: 600; }
+        .card { background: #1e293b; border-radius: 0.5rem; padding: 1.5rem; margin-bottom: 1rem; }
+        .card h2 { font-size: 1.125rem; margin-bottom: 1rem; color: #94a3b8; }
+        table { width: 100%; border-collapse: collapse; }
+        th, td { text-align: left; padding: 0.5rem 0.75rem; border-bottom: 1px solid #334155; }
+        th { color: #64748b; font-size: 0.75rem; text-transform: uppercase; letter-spacing: 0.05em; }
+        .state-applied { color: #22c55e; }
+        .state-pending { color: #eab308; }
+        .state-failed { color: #ef4444; }
+        #loading { text-align: center; padding: 2rem; color: #64748b; }
+        #error { background: #7f1d1d; border-radius: 0.5rem; padding: 1rem; margin-bottom: 1rem; display: none; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>drift</h1>
+            <span class="badge" id="driver-badge"></span>
+        </header>
+
+        <div id="error"></div>
+
+        <div class="card">
+            <h2>Migration Status</h2>
+            <div id="loading">Loading...</div>
+            <table id="migrations" style="display: none;">
+                <thead>
+                    <tr>
+                        <th>Version</th>
+                        <th>Description</th>
+                        <th>State</th>
+                        <th>Installed On</th>
+                        <th>Exec Time</th>
+                    </tr>
+                </thead>
+                <tbody id="migration-body"></tbody>
+            </table>
+        </div>
+
+        <div class="card">
+            <h2>Summary</h2>
+            <div id="summary"></div>
+        </div>
+    </div>
+
+    <script>
+        async function load() {
+            try {
+                const resp = await fetch('/api/v1/info');
+                const data = await resp.json();
+
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('migrations').style.display = 'table';
+
+                const tbody = document.getElementById('migration-body');
+                let applied = 0, pending = 0, failed = 0;
+
+                (data || []).forEach(m => {
+                    const tr = document.createElement('tr');
+                    const stateClass = 'state-' + (m.State || '').toLowerCase();
+                    tr.innerHTML = `
+                        <td>${m.Version || '-'}</td>
+                        <td>${m.Description || ''}</td>
+                        <td class="${stateClass}">${m.State || ''}</td>
+                        <td>${m.InstalledOn ? new Date(m.InstalledOn).toLocaleString() : '-'}</td>
+                        <td>${m.ExecTime ? m.ExecTime + 'ms' : '-'}</td>
+                    `;
+                    tbody.appendChild(tr);
+
+                    if (m.State === 'Applied') applied++;
+                    else if (m.State === 'Pending') pending++;
+                    else if (m.State === 'Failed') failed++;
+                });
+
+                document.getElementById('summary').innerHTML =
+                    `Applied: ${applied} | Pending: ${pending} | Failed: ${failed}`;
+            } catch (err) {
+                document.getElementById('loading').style.display = 'none';
+                document.getElementById('error').style.display = 'block';
+                document.getElementById('error').textContent = 'Error loading migrations: ' + err.message;
+            }
+        }
+        load();
+    </script>
+</body>
+</html>

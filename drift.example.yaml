@@ -1,0 +1,38 @@
+# drift configuration
+# See: https://github.com/frankchan/drift
+
+# Database connection URL
+# Supports: postgres://, mysql://, sqlite:// or .db/.sqlite file paths
+# Use ${ENV_VAR} for environment variable interpolation
+url: ${DRIFT_URL:-postgres://localhost:5432/mydb?sslmode=disable}
+
+# Migration file locations (relative to working directory)
+locations:
+  - migrations
+
+# Schema history table name
+table: drift_schema_history
+
+# Schemas to manage (Postgres only)
+schemas:
+  - public
+
+# Baseline version (skip migrations at or below this version)
+# baseline: "001"
+
+# Allow out-of-order migrations
+# outOfOrder: false
+
+# Placeholder substitution in migration SQL
+# placeholders:
+#   schema: public
+#   table_prefix: app_
+
+# Callback locations (SQL files run before/after lifecycle events)
+# callbacks:
+#   - callbacks
+
+# Web UI settings
+ui:
+  port: 4077
+  host: 127.0.0.1
