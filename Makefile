@@ -4,13 +4,19 @@ COMMIT := $(shell git rev-parse --short HEAD 2>/dev/null || echo "none")
 DATE := $(shell date -u +"%Y-%m-%dT%H:%M:%SZ")
 LDFLAGS := -ldflags "-s -w -X github.com/frankchan/drift/internal/cli.Version=$(VERSION) -X github.com/frankchan/drift/internal/cli.Commit=$(COMMIT) -X github.com/frankchan/drift/internal/cli.Date=$(DATE)"
 
-.PHONY: build install test lint clean
+.PHONY: build install test lint clean ui
 
-build:
+build: ui
 	go build $(LDFLAGS) -o bin/$(BINARY) ./cmd/drift
 
-install:
+build-go:
+	go build $(LDFLAGS) -o bin/$(BINARY) ./cmd/drift
+
+install: ui
 	go install $(LDFLAGS) ./cmd/drift
+
+ui:
+	cd ui && npm install --silent && npm run build
 
 test:
 	go test ./...
@@ -22,7 +28,7 @@ lint:
 	golangci-lint run ./...
 
 clean:
-	rm -rf bin/
+	rm -rf bin/ ui/node_modules
 
 fmt:
 	gofmt -s -w .
