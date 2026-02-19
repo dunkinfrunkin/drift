@@ -40,6 +40,7 @@ brews:
   - repository:
       owner: dunkinfrunkin
       name: homebrew-tap
+      token: "{{ .Env.HOMEBREW_TAP_GITHUB_TOKEN }}"
     directory: Formula
     homepage: https://github.com/frankchan/drift
     description: "Fast, open-source database migration tool with undo, dry-run, diff, and linting"
