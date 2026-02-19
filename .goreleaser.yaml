@@ -35,3 +35,40 @@ changelog:
       - "^docs:"
       - "^test:"
       - "^ci:"
+
+brews:
+  - repository:
+      owner: frankchan
+      name: homebrew-tap
+    directory: Formula
+    homepage: https://github.com/frankchan/drift
+    description: "Fast, open-source database migration tool with undo, dry-run, diff, and linting"
+    license: MIT
+    test: |
+      system "#{bin}/drift", "version"
+
+dockers:
+  - image_templates:
+      - "ghcr.io/frankchan/drift:{{ .Version }}-amd64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    dockerfile: Dockerfile.goreleaser
+    goarch: amd64
+  - image_templates:
+      - "ghcr.io/frankchan/drift:{{ .Version }}-arm64"
+    use: buildx
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    dockerfile: Dockerfile.goreleaser
+    goarch: arm64
+
+docker_manifests:
+  - name_template: "ghcr.io/frankchan/drift:{{ .Version }}"
+    image_templates:
+      - "ghcr.io/frankchan/drift:{{ .Version }}-amd64"
+      - "ghcr.io/frankchan/drift:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/frankchan/drift:latest"
+    image_templates:
+      - "ghcr.io/frankchan/drift:{{ .Version }}-amd64"
+      - "ghcr.io/frankchan/drift:{{ .Version }}-arm64"
