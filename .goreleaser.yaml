@@ -38,7 +38,7 @@ changelog:
 
 brews:
   - repository:
-      owner: frankchan
+      owner: dunkinfrunkin
       name: homebrew-tap
     directory: Formula
     homepage: https://github.com/frankchan/drift
@@ -49,14 +49,14 @@ brews:
 
 dockers:
   - image_templates:
-      - "ghcr.io/frankchan/drift:{{ .Version }}-amd64"
+      - "ghcr.io/dunkinfrunkin/drift:{{ .Version }}-amd64"
     use: buildx
     build_flag_templates:
       - "--platform=linux/amd64"
     dockerfile: Dockerfile.goreleaser
     goarch: amd64
   - image_templates:
-      - "ghcr.io/frankchan/drift:{{ .Version }}-arm64"
+      - "ghcr.io/dunkinfrunkin/drift:{{ .Version }}-arm64"
     use: buildx
     build_flag_templates:
       - "--platform=linux/arm64"
@@ -64,11 +64,11 @@ dockers:
     goarch: arm64
 
 docker_manifests:
-  - name_template: "ghcr.io/frankchan/drift:{{ .Version }}"
+  - name_template: "ghcr.io/dunkinfrunkin/drift:{{ .Version }}"
     image_templates:
-      - "ghcr.io/frankchan/drift:{{ .Version }}-amd64"
-      - "ghcr.io/frankchan/drift:{{ .Version }}-arm64"
-  - name_template: "ghcr.io/frankchan/drift:latest"
+      - "ghcr.io/dunkinfrunkin/drift:{{ .Version }}-amd64"
+      - "ghcr.io/dunkinfrunkin/drift:{{ .Version }}-arm64"
+  - name_template: "ghcr.io/dunkinfrunkin/drift:latest"
     image_templates:
-      - "ghcr.io/frankchan/drift:{{ .Version }}-amd64"
-      - "ghcr.io/frankchan/drift:{{ .Version }}-arm64"
+      - "ghcr.io/dunkinfrunkin/drift:{{ .Version }}-amd64"
+      - "ghcr.io/dunkinfrunkin/drift:{{ .Version }}-arm64"
