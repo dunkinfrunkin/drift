@@ -13,6 +13,12 @@ vendor/
 ui/node_modules/
 ui/dist/
 
+# Docs (Docusaurus)
+docs/node_modules/
+docs/build/
+docs/.docusaurus/
+docs/.cache-loader/
+
 # IDE
 .idea/
 .vscode/
