@@ -1,5 +1,12 @@
 # drift
 
+[![CI](https://github.com/dunkinfrunkin/drift/actions/workflows/ci.yml/badge.svg)](https://github.com/dunkinfrunkin/drift/actions/workflows/ci.yml)
+[![Integration Tests](https://github.com/dunkinfrunkin/drift/actions/workflows/integration.yml/badge.svg)](https://github.com/dunkinfrunkin/drift/actions/workflows/integration.yml)
+[![Go Report Card](https://goreportcard.com/badge/github.com/dunkinfrunkin/drift)](https://goreportcard.com/report/github.com/dunkinfrunkin/drift)
+[![Go Version](https://img.shields.io/github/go-mod/go-version/dunkinfrunkin/drift)](https://github.com/dunkinfrunkin/drift/blob/main/go.mod)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
+[![Release](https://img.shields.io/github/v/release/dunkinfrunkin/drift)](https://github.com/dunkinfrunkin/drift/releases/latest)
+
 A fast, open-source database migration tool. Single binary, zero runtime dependencies.
 
 **Everything Flyway paywalls — undo, dry-run, cherry-pick, drift detection, schema diff, linting — is free and open source.**
