@@ -30,13 +30,18 @@ func newInitCmd() *cobra.Command {
 			}
 
 			content := fmt.Sprintf(`# drift configuration
+
+# Database connection URL
 url: %s
 
+# Directories to scan for migration files (e.g. V001__create_users.sql)
 locations:
   - migrations
 
+# Table used by drift to track which migrations have been applied
 table: drift_schema_history
 
+# Key-value pairs that will be replaced in migration scripts as ${key} placeholders
 # placeholders:
 #   schema: public
 `, urlExample)
