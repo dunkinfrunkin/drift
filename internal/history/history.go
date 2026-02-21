@@ -102,7 +102,7 @@ func (h *History) Record(ctx context.Context, m *migration.Migration, execTime t
 		m.Description,
 		string(m.Type),
 		m.Script,
-		m.Checksum,
+		int32(m.Checksum),
 		installedBy,
 		time.Now().UTC().Format(time.RFC3339),
 		execTime.Milliseconds(),
@@ -141,7 +141,7 @@ func (h *History) UpdateChecksum(ctx context.Context, version string, checksum u
 	qt := d.QuoteIdentifier(h.table)
 	_, err := h.db.DB().ExecContext(ctx,
 		fmt.Sprintf("UPDATE %s SET checksum = %s WHERE version = %s", qt, d.Placeholder(1), d.Placeholder(2)),
-		checksum, version)
+		int32(checksum), version)
 	return err
 }
 
