@@ -103,6 +103,8 @@ func (d *Dialect) CreateHistoryTableSQL(table string) string {
     script         TEXT NOT NULL,
     checksum       INTEGER,
     installed_by   TEXT NOT NULL,
+    installed_host TEXT NOT NULL DEFAULT '',
+    installed_ip   TEXT NOT NULL DEFAULT '',
     installed_on   TEXT NOT NULL DEFAULT (datetime('now')),
     execution_time INTEGER NOT NULL,
     success        INTEGER NOT NULL

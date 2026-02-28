@@ -73,6 +73,10 @@ drift ui --url postgres://localhost:5432/mydb
 
 Opens an embedded dashboard at `http://localhost:4077` with migration history, schema diffs, lint results, and more.
 
+## Try It with Docker
+
+Want to try drift hands-on? The [`example/postgres`](https://github.com/dunkinfrunkin/drift/tree/main/example/postgres) directory has a Docker Compose setup with sample migrations, undo scripts, and a step-by-step walkthrough covering migrate, info, snapshot, diff, undo, lint, and the web UI.
+
 ## What's Next?
 
 - **[Migration Files](./migration-files.md)** — Naming conventions, undo files, repeatable migrations

@@ -81,6 +81,8 @@ func (d *Dialect) CreateHistoryTableSQL(table string) string {
     script         VARCHAR(1000) NOT NULL,
     checksum       INTEGER,
     installed_by   VARCHAR(100) NOT NULL,
+    installed_host VARCHAR(255) NOT NULL DEFAULT '',
+    installed_ip   VARCHAR(45) NOT NULL DEFAULT '',
     installed_on   TIMESTAMP NOT NULL DEFAULT now(),
     execution_time INTEGER NOT NULL,
     success        BOOLEAN NOT NULL,

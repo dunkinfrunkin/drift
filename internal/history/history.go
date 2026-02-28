@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"net"
+	"os"
 	"os/user"
 	"strings"
 	"time"
@@ -36,7 +38,35 @@ func (h *History) EnsureTable(ctx context.Context) error {
 			return fmt.Errorf("creating history table: %w", err)
 		}
 	}
+
+	// Upgrade existing tables to add new columns (installed_host, installed_ip).
+	h.upgradeTable(ctx)
+
 	return nil
+}
+
+// upgradeTable adds columns that may not exist in older history tables.
+func (h *History) upgradeTable(ctx context.Context) {
+	d := h.db.Dialect()
+	qt := d.QuoteIdentifier(h.table)
+
+	for _, col := range []string{"installed_host", "installed_ip"} {
+		var stmt string
+		switch d.Name() {
+		case "sqlite":
+			// SQLite doesn't support IF NOT EXISTS on ALTER TABLE.
+			// Attempt the ALTER and ignore errors if column already exists.
+			stmt = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s TEXT NOT NULL DEFAULT ''", qt, col)
+		case "mysql":
+			// MySQL doesn't support ADD COLUMN IF NOT EXISTS directly.
+			// Use a simple ALTER and ignore duplicate column errors.
+			stmt = fmt.Sprintf("ALTER TABLE %s ADD COLUMN %s VARCHAR(255) NOT NULL DEFAULT ''", qt, col)
+		default:
+			stmt = fmt.Sprintf("ALTER TABLE %s ADD COLUMN IF NOT EXISTS %s VARCHAR(255) NOT NULL DEFAULT ''", qt, col)
+		}
+		// Ignore errors — column may already exist.
+		h.db.DB().ExecContext(ctx, stmt)
+	}
 }
 
 // All returns all applied migrations ordered by installed_rank.
@@ -44,7 +74,7 @@ func (h *History) All(ctx context.Context) ([]migration.AppliedMigration, error)
 	qt := h.db.Dialect().QuoteIdentifier(h.table)
 	rows, err := h.db.DB().QueryContext(ctx, fmt.Sprintf(
 		`SELECT installed_rank, version, description, type, script, checksum,
-		        installed_by, installed_on, execution_time, success
+		        installed_by, installed_host, installed_ip, installed_on, execution_time, success
 		 FROM %s ORDER BY installed_rank`, qt))
 	if err != nil {
 		return nil, err
@@ -59,7 +89,8 @@ func (h *History) All(ctx context.Context) ([]migration.AppliedMigration, error)
 		var installedOn string
 		if err := rows.Scan(
 			&am.InstalledRank, &version, &am.Description, &am.Type, &am.Script,
-			&checksum, &am.InstalledBy, &installedOn, &am.ExecutionTime, &am.Success,
+			&checksum, &am.InstalledBy, &am.InstalledHost, &am.InstalledIP,
+			&installedOn, &am.ExecutionTime, &am.Success,
 		); err != nil {
 			return nil, err
 		}
@@ -87,14 +118,16 @@ func (h *History) Record(ctx context.Context, m *migration.Migration, execTime t
 	}
 
 	installedBy := currentUser()
+	installedHost := currentHostname()
+	installedIP := currentIP()
 
 	query := fmt.Sprintf(
-		`INSERT INTO %s (installed_rank, version, description, type, script, checksum, installed_by, installed_on, execution_time, success)
-		 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s)`,
+		`INSERT INTO %s (installed_rank, version, description, type, script, checksum, installed_by, installed_host, installed_ip, installed_on, execution_time, success)
+		 VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s, %s)`,
 		qt,
 		d.Placeholder(1), d.Placeholder(2), d.Placeholder(3), d.Placeholder(4),
 		d.Placeholder(5), d.Placeholder(6), d.Placeholder(7), d.Placeholder(8),
-		d.Placeholder(9), d.Placeholder(10))
+		d.Placeholder(9), d.Placeholder(10), d.Placeholder(11), d.Placeholder(12))
 
 	_, err = h.db.DB().ExecContext(ctx, query,
 		nextRank,
@@ -104,6 +137,8 @@ func (h *History) Record(ctx context.Context, m *migration.Migration, execTime t
 		m.Script,
 		int32(m.Checksum),
 		installedBy,
+		installedHost,
+		installedIP,
 		time.Now().UTC().Format(time.RFC3339),
 		execTime.Milliseconds(),
 		success,
@@ -186,4 +221,25 @@ func currentUser() string {
 		return "drift"
 	}
 	return u.Username
+}
+
+func currentHostname() string {
+	h, err := os.Hostname()
+	if err != nil {
+		return "unknown"
+	}
+	return h
+}
+
+func currentIP() string {
+	addrs, err := net.InterfaceAddrs()
+	if err != nil {
+		return "unknown"
+	}
+	for _, addr := range addrs {
+		if ipNet, ok := addr.(*net.IPNet); ok && !ipNet.IP.IsLoopback() && ipNet.IP.To4() != nil {
+			return ipNet.IP.String()
+		}
+	}
+	return "unknown"
 }
