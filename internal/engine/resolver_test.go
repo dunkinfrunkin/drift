@@ -21,18 +21,18 @@ func TestResolve(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	// Should find 3 SQL files, sorted (R_ sorts before V_)
+	// Should find 3 SQL files, sorted (versioned first, then repeatable)
 	if len(all) != 3 {
 		t.Fatalf("expected 3 migrations, got %d", len(all))
 	}
-	if all[0].Type != migration.TypeRepeatable {
-		t.Errorf("first should be repeatable (R_ < V_), got %s", all[0].Type)
+	if all[0].Version != "001" {
+		t.Errorf("first should be V001, got V%s", all[0].Version)
 	}
-	if all[1].Version != "001" {
-		t.Errorf("second should be V001, got V%s", all[1].Version)
+	if all[1].Version != "002" {
+		t.Errorf("second should be V002, got V%s", all[1].Version)
 	}
-	if all[2].Version != "002" {
-		t.Errorf("third should be V002, got V%s", all[2].Version)
+	if all[2].Type != migration.TypeRepeatable {
+		t.Errorf("third should be repeatable, got %s", all[2].Type)
 	}
 }
 

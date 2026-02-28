@@ -54,7 +54,7 @@ func newSnapshotCmd() *cobra.Command {
 		},
 	}
 
-	cmd.Flags().StringVar(&output, "output", "", "write to file instead of stdout")
+	cmd.Flags().StringVarP(&output, "output", "o", "", "write to file instead of stdout")
 	cmd.Flags().StringVar(&format, "format", "json", "output format (json, yaml)")
 
 	return cmd

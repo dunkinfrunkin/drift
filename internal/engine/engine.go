@@ -5,10 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
+	"strings"
 	"time"
 
 	"github.com/frankchan/drift/internal/config"
 	"github.com/frankchan/drift/internal/database"
+	"github.com/frankchan/drift/internal/diff"
 	"github.com/frankchan/drift/internal/history"
 	"github.com/frankchan/drift/internal/migration"
 )
@@ -79,6 +81,12 @@ func (e *Engine) Migrate(ctx context.Context, opts PlanOptions) ([]ExecuteResult
 		return nil, nil
 	}
 
+	// Capture pre-migration schema snapshot for auto-rollback
+	var preSnapshot *diff.SchemaSnapshot
+	if !opts.DryRun {
+		preSnapshot, _ = diff.CaptureSchema(ctx, e.db)
+	}
+
 	executor := NewExecutor(e.db, e.history, e.output)
 	var results []ExecuteResult
 
@@ -95,6 +103,7 @@ func (e *Engine) Migrate(ctx context.Context, opts PlanOptions) ([]ExecuteResult
 			fmt.Fprintf(e.output, "  Success  (%s)\n", result.ExecutionTime.Round(time.Millisecond))
 		} else {
 			fmt.Fprintf(e.output, "  FAILED   (%s)\n", result.ExecutionTime.Round(time.Millisecond))
+			e.autoRollback(ctx, preSnapshot, results, executor)
 			return results, result.Error
 		}
 
@@ -109,6 +118,87 @@ func (e *Engine) Migrate(ctx context.Context, opts PlanOptions) ([]ExecuteResult
 
 	fmt.Fprintf(e.output, "Successfully applied %d migration(s).\n", len(results))
 	return results, nil
+}
+
+// autoRollback reverses successfully applied migrations from the current run after a failure.
+func (e *Engine) autoRollback(ctx context.Context, preSnapshot *diff.SchemaSnapshot, results []ExecuteResult, executor *Executor) {
+	// Collect successful versioned migrations (skip the failed one and non-versioned)
+	var successful []ExecuteResult
+	for _, r := range results {
+		if r.Success && r.Migration.Type == migration.TypeVersioned {
+			successful = append(successful, r)
+		}
+	}
+
+	if len(successful) == 0 || preSnapshot == nil {
+		return
+	}
+
+	fmt.Fprintf(e.output, "\nAuto-rolling back %d migration(s)...\n", len(successful))
+
+	// Try undo files first
+	undoByVersion := make(map[string]*migration.Migration)
+	if undoFiles, err := e.resolver.ResolveByType(migration.TypeUndo); err == nil {
+		for _, u := range undoFiles {
+			undoByVersion[u.Version] = u
+		}
+	}
+
+	// Rollback in reverse order
+	for i := len(successful) - 1; i >= 0; i-- {
+		r := successful[i]
+		version := r.Migration.Version
+
+		if undo, ok := undoByVersion[version]; ok {
+			// Use the undo file
+			fmt.Fprintf(e.output, "  Rolling back V%s (using %s)\n", version, undo.Script)
+			result := executor.Execute(ctx, undo, false)
+			if !result.Success {
+				fmt.Fprintf(e.output, "  ROLLBACK FAILED for V%s: %v\n", version, result.Error)
+				return
+			}
+		} else {
+			// Generate reverse DDL from diff
+			currentSchema, err := diff.CaptureSchema(ctx, e.db)
+			if err != nil {
+				fmt.Fprintf(e.output, "  ROLLBACK FAILED: could not capture schema: %v\n", err)
+				return
+			}
+			changes := diff.Compare(preSnapshot, currentSchema)
+			var rollbackSQL []string
+			for _, c := range changes.Changes {
+				if c.SQL != "" {
+					rollbackSQL = append(rollbackSQL, c.SQL)
+				}
+			}
+			if len(rollbackSQL) == 0 {
+				fmt.Fprintf(e.output, "  Skipping V%s (no reverse DDL generated)\n", version)
+				continue
+			}
+
+			fmt.Fprintf(e.output, "  Rolling back V%s (auto-generated)\n", version)
+			rollbackM := &migration.Migration{
+				Version:     version,
+				Description: "auto-rollback",
+				Type:        migration.TypeRollback,
+				Script:      fmt.Sprintf("rollback_V%s", version),
+				SQL:         strings.Join(rollbackSQL, ";\n"),
+			}
+			rollbackM.Checksum = migration.ComputeChecksum(rollbackM.SQL)
+			result := executor.Execute(ctx, rollbackM, false)
+			if !result.Success {
+				fmt.Fprintf(e.output, "  ROLLBACK FAILED for V%s: %v\n", version, result.Error)
+				return
+			}
+		}
+
+		// Remove the forward migration's history entry
+		if err := e.history.Remove(ctx, version); err != nil {
+			fmt.Fprintf(e.output, "  Warning: could not remove history for V%s: %v\n", version, err)
+		}
+	}
+
+	fmt.Fprintln(e.output, "Auto-rollback complete.")
 }
 
 // Undo reverses applied migrations.

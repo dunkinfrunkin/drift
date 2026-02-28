@@ -15,6 +15,7 @@ const (
 	TypeRepeatable  Type = "REPEATABLE"
 	TypeUndo        Type = "UNDO"
 	TypeCallback    Type = "CALLBACK"
+	TypeRollback    Type = "ROLLBACK"
 )
 
 // State represents the execution state of a migration.
@@ -49,6 +50,8 @@ type AppliedMigration struct {
 	Script        string
 	Checksum      uint32
 	InstalledBy   string
+	InstalledHost string
+	InstalledIP   string
 	InstalledOn   time.Time
 	ExecutionTime int // milliseconds
 	Success       bool
@@ -137,7 +140,7 @@ func (m *Migration) SortKey() string {
 	case TypeVersioned, TypeUndo:
 		return fmt.Sprintf("V%010s", m.Version)
 	case TypeRepeatable:
-		return "R_" + m.Description
+		return "ZR_" + m.Description
 	case TypeCallback:
 		return "C_" + m.Description
 	default:

@@ -12,7 +12,7 @@ import {
   GitBranch,
   LayoutDashboard,
   Package,
-  ScissorsLineCut,
+  Scissors,
   ShieldCheck,
   Shrink,
   X,
@@ -88,7 +88,7 @@ const features = [
     desc: 'Preview exactly what SQL will execute before committing to anything.',
   },
   {
-    icon: <ScissorsLineCut size={20} />,
+    icon: <Scissors size={20} />,
     title: 'Cherry-Pick & Skip',
     desc: 'Apply specific migrations out of order or skip problematic ones.',
   },
