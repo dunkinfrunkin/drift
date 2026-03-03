@@ -44,6 +44,7 @@ func NewRootCmd() *cobra.Command {
 	root.AddCommand(
 		newMigrateCmd(),
 		newUndoCmd(),
+		newRollbackCmd(),
 		newInfoCmd(),
 		newValidateCmd(),
 		newCleanCmd(),
@@ -56,6 +57,7 @@ func NewRootCmd() *cobra.Command {
 		newSquashCmd(),
 		newUICmd(),
 		newInitCmd(),
+		newTutorialCmd(),
 		newVersionCmd(),
 	)
 

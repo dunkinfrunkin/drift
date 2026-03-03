@@ -2,10 +2,28 @@
 
 A hands-on walkthrough of drift with PostgreSQL. You'll apply migrations, inspect schema, take snapshots, undo changes, and more.
 
+## Interactive Tutorial
+
+The fastest way to learn drift:
+
+```bash
+drift tutorial
+```
+
+Or run it directly from this directory:
+
+```bash
+./tutorial.sh
+```
+
+It walks through every step below automatically, pausing for you to press Enter between each one.
+
 ## Prerequisites
 
 - [Docker](https://docs.docker.com/get-docker/)
 - [drift](https://github.com/dunkinfrunkin/drift)
+
+## Manual Walkthrough
 
 ## 1. Start Postgres
 
