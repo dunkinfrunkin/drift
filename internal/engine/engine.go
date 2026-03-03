@@ -396,6 +396,7 @@ func extractName(stmt, prefix string) string {
 	return ""
 }
 
+
 // Undo reverses applied migrations.
 func (e *Engine) Undo(ctx context.Context, count int, target string, dryRun bool) ([]ExecuteResult, error) {
 	if err := e.db.Lock(ctx); err != nil {
