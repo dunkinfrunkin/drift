@@ -201,6 +201,202 @@ func (e *Engine) autoRollback(ctx context.Context, preSnapshot *diff.SchemaSnaps
 	fmt.Fprintln(e.output, "Auto-rollback complete.")
 }
 
+// Rollback reverses applied migrations without requiring undo files.
+// It reads the original migration SQL and generates inverse operations
+// (CREATE TABLE → DROP TABLE, ADD COLUMN → DROP COLUMN, etc.).
+//
+// Usage (like git reset):
+//   - count=1, target="": roll back the last migration
+//   - count=N: roll back the last N migrations
+//   - target="003": roll back everything after version 003
+func (e *Engine) Rollback(ctx context.Context, count int, target string, dryRun bool) ([]ExecuteResult, error) {
+	if err := e.db.Lock(ctx); err != nil {
+		return nil, fmt.Errorf("acquiring lock: %w", err)
+	}
+	defer e.db.Unlock(ctx)
+
+	if err := e.history.EnsureTable(ctx); err != nil {
+		return nil, err
+	}
+
+	applied, err := e.history.All(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// Resolve migration files to get original SQL
+	discovered, err := e.resolver.Resolve()
+	if err != nil {
+		return nil, err
+	}
+	migrationByVersion := make(map[string]*migration.Migration)
+	for _, m := range discovered {
+		if m.Type == migration.TypeVersioned {
+			migrationByVersion[m.Version] = m
+		}
+	}
+
+	// Collect versioned migrations to roll back (in reverse order)
+	var toRollback []migration.AppliedMigration
+	for i := len(applied) - 1; i >= 0; i-- {
+		a := applied[i]
+		if !a.Success || a.Type != migration.TypeVersioned {
+			continue
+		}
+		if target != "" && a.Version <= target {
+			break
+		}
+		toRollback = append(toRollback, a)
+		if count > 0 && len(toRollback) >= count {
+			break
+		}
+	}
+
+	if len(toRollback) == 0 {
+		fmt.Fprintln(e.output, "Nothing to roll back.")
+		return nil, nil
+	}
+
+	executor := NewExecutor(e.db, e.history, e.output)
+	var results []ExecuteResult
+
+	for _, a := range toRollback {
+		m, ok := migrationByVersion[a.Version]
+		if !ok {
+			return results, fmt.Errorf("migration file not found for V%s — cannot generate rollback", a.Version)
+		}
+
+		rollbackSQL := invertSQL(m.SQL)
+		if len(rollbackSQL) == 0 {
+			return results, fmt.Errorf("could not generate reverse DDL for V%s (%s) — use 'drift undo' with a U%s__ file instead", a.Version, a.Script, a.Version)
+		}
+
+		if dryRun {
+			fmt.Fprintf(e.output, "[dry-run] Would roll back: V%s (%s)\n", a.Version, a.Description)
+			for _, sql := range rollbackSQL {
+				fmt.Fprintf(e.output, "  %s;\n", sql)
+			}
+			results = append(results, ExecuteResult{
+				Migration: &migration.Migration{Version: a.Version, Description: a.Description, Type: migration.TypeRollback, Script: a.Script},
+				Success:   true,
+			})
+			continue
+		}
+
+		fmt.Fprintf(e.output, "Rolling back: V%s (%s)\n", a.Version, a.Description)
+
+		rollbackM := &migration.Migration{
+			Version:     a.Version,
+			Description: "rollback",
+			Type:        migration.TypeRollback,
+			Script:      fmt.Sprintf("rollback_V%s", a.Version),
+			SQL:         strings.Join(rollbackSQL, ";\n"),
+		}
+		rollbackM.Checksum = migration.ComputeChecksum(rollbackM.SQL)
+
+		result := executor.Execute(ctx, rollbackM, false)
+		results = append(results, *result)
+
+		if result.Success {
+			// Remove the forward migration's history entry
+			if err := e.history.Remove(ctx, a.Version); err != nil {
+				return results, fmt.Errorf("removing history for V%s: %w", a.Version, err)
+			}
+			fmt.Fprintf(e.output, "  Success  (%s)\n", result.ExecutionTime.Round(time.Millisecond))
+		} else {
+			fmt.Fprintf(e.output, "  FAILED   (%s)\n", result.ExecutionTime.Round(time.Millisecond))
+			return results, result.Error
+		}
+	}
+
+	fmt.Fprintf(e.output, "Successfully rolled back %d migration(s).\n", len(results))
+	return results, nil
+}
+
+// invertSQL parses migration SQL and generates inverse operations.
+// Supports: CREATE TABLE → DROP TABLE, CREATE INDEX → DROP INDEX,
+// ALTER TABLE ADD COLUMN → ALTER TABLE DROP COLUMN.
+func invertSQL(sql string) []string {
+	var inverse []string
+	for _, stmt := range splitSQL(sql) {
+		stmt = strings.TrimSpace(stmt)
+		upper := strings.ToUpper(stmt)
+
+		switch {
+		case strings.HasPrefix(upper, "CREATE TABLE"):
+			name := extractName(stmt, "CREATE TABLE")
+			if name != "" {
+				inverse = append(inverse, fmt.Sprintf("DROP TABLE IF EXISTS %s CASCADE", name))
+			}
+		case strings.HasPrefix(upper, "CREATE INDEX"):
+			name := extractName(stmt, "CREATE INDEX")
+			if name != "" {
+				inverse = append(inverse, fmt.Sprintf("DROP INDEX IF EXISTS %s CASCADE", name))
+			}
+		case strings.HasPrefix(upper, "CREATE UNIQUE INDEX"):
+			name := extractName(stmt, "CREATE UNIQUE INDEX")
+			if name != "" {
+				inverse = append(inverse, fmt.Sprintf("DROP INDEX IF EXISTS %s CASCADE", name))
+			}
+		case strings.HasPrefix(upper, "CREATE OR REPLACE"):
+			// Views, functions — extract the type and name
+			name := extractName(stmt, "CREATE OR REPLACE VIEW")
+			if name != "" {
+				inverse = append(inverse, fmt.Sprintf("DROP VIEW IF EXISTS %s", name))
+			}
+		case strings.Contains(upper, "ADD COLUMN"):
+			// ALTER TABLE x ADD COLUMN y ...
+			parts := strings.Fields(stmt)
+			if len(parts) >= 6 {
+				tableName := parts[2]
+				colName := parts[5]
+				inverse = append(inverse, fmt.Sprintf("ALTER TABLE %s DROP COLUMN IF EXISTS %s CASCADE", tableName, colName))
+			}
+		case strings.HasPrefix(upper, "ALTER TABLE") && strings.Contains(upper, "ADD CONSTRAINT"):
+			// ALTER TABLE x ADD CONSTRAINT y ...
+			parts := strings.Fields(stmt)
+			if len(parts) >= 6 {
+				tableName := parts[2]
+				constraintName := parts[5]
+				inverse = append(inverse, fmt.Sprintf("ALTER TABLE %s DROP CONSTRAINT IF EXISTS %s CASCADE", tableName, constraintName))
+			}
+		}
+	}
+
+	// Reverse the order so dependent objects are dropped first
+	for i, j := 0, len(inverse)-1; i < j; i, j = i+1, j-1 {
+		inverse[i], inverse[j] = inverse[j], inverse[i]
+	}
+
+	return inverse
+}
+
+// extractName pulls the object name from a DDL statement like
+// "CREATE TABLE IF NOT EXISTS foo (" → "foo"
+func extractName(stmt, prefix string) string {
+	upper := strings.ToUpper(stmt)
+	if !strings.HasPrefix(upper, strings.ToUpper(prefix)) {
+		return ""
+	}
+	rest := strings.TrimSpace(stmt[len(prefix):])
+
+	// Skip "IF NOT EXISTS"
+	upperRest := strings.ToUpper(rest)
+	if strings.HasPrefix(upperRest, "IF NOT EXISTS") {
+		rest = strings.TrimSpace(rest[len("IF NOT EXISTS"):])
+	}
+
+	// The name is the next token (stop at space, paren, or newline)
+	name := strings.FieldsFunc(rest, func(r rune) bool {
+		return r == ' ' || r == '(' || r == '\n' || r == '\r' || r == '\t'
+	})
+	if len(name) > 0 {
+		return name[0]
+	}
+	return ""
+}
+
+
 // Undo reverses applied migrations.
 func (e *Engine) Undo(ctx context.Context, count int, target string, dryRun bool) ([]ExecuteResult, error) {
 	if err := e.db.Lock(ctx); err != nil {
